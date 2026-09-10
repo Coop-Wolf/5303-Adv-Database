@@ -156,15 +156,25 @@ def list_purchases2(
 _TODO = "not implemented -- see Assignments/01_sqlite_api/README.md"
 
 
-@app.get("/customers/{customer_id}/purchases",
-         response_model=list[PurchaseDetail],
-         dependencies=[Depends(require_api_key)])
+# COMPLETE
+@app.get("/customers/{customer_id}/purchases", response_model=list[PurchaseDetail], dependencies=[Depends(require_api_key)])
 def customer_purchases(customer_id: int, db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 2)")
+    rows = db.execute(
+        """
+        SELECT purchase_id, purchase_date, product_name, department, amount
+        FROM purchase_details
+        WHERE customer_id = ?
+        """,
+        (customer_id,),).fetchall()
+
+    if not rows:
+        raise HTTPException(404, f"no purchases found for customer {customer_id}")
+
+    return [dict(row) for row in rows]
 
 
-@app.get("/stats/revenue-by-state", response_model=list[RevenueRow],
-         dependencies=[Depends(require_api_key)])
+
+@app.get("/stats/revenue-by-state", response_model=list[RevenueRow], dependencies=[Depends(require_api_key)])
 def revenue_by_state(db: sqlite3.Connection = Depends(get_db)):
     raise HTTPException(501, _TODO + " (Phase 2)")
 
@@ -181,6 +191,7 @@ def top_products(
     by: str = Query("revenue", pattern="^(revenue|count)$"),
     limit: int = Query(10, ge=1, le=100),
 ):
+    
     raise HTTPException(501, _TODO + " (Phase 2)")
 
 

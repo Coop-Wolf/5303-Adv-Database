@@ -29,7 +29,7 @@ from pathlib import Path
 
 DEFAULT_SCHEMA = (
     Path(__file__).resolve().parents[3]
-    / "Lectures" / "02_sqlite" / "sql" / "01_schema.sql"
+    / "Assignments" / "01_sqlite_api" / "starter_classroom" / "01_schema.sql"
 )
 
 STATES = [
