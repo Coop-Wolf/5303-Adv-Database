@@ -173,10 +173,33 @@ def customer_purchases(customer_id: int, db: sqlite3.Connection = Depends(get_db
     return [dict(row) for row in rows]
 
 
-
-@app.get("/stats/revenue-by-state", response_model=list[RevenueRow], dependencies=[Depends(require_api_key)])
+# COMPLETE
+@app.get("/stats/revenue-by-state", response_model=list[RevenueRow],
+         dependencies=[Depends(require_api_key)])
 def revenue_by_state(db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 2)")
+
+    rows = db.execute("""
+        SELECT
+            z.state_code AS key,
+            COUNT(*) AS num_purchases,
+            SUM(p.amount) AS revenue
+        FROM purchases p
+        JOIN customers c
+            ON p.customer_id = c.customer_id
+        JOIN zipcodes z
+            ON c.zipcode = z.zipcode
+        GROUP BY z.state_code
+        ORDER BY z.state_code
+    """).fetchall()
+
+    return [
+        RevenueRow(
+            key=row["key"],
+            num_purchases=row["num_purchases"],
+            revenue=row["revenue"]
+        )
+        for row in rows
+    ]
 
 
 @app.get("/stats/revenue-by-month", response_model=list[RevenueRow],
