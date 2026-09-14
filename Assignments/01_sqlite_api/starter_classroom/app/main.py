@@ -201,7 +201,7 @@ def revenue_by_state(db: sqlite3.Connection = Depends(get_db)):
         for row in rows
     ]
 
-
+# STILL NEED
 @app.get("/stats/revenue-by-month", response_model=list[RevenueRow],
          dependencies=[Depends(require_api_key)])
 def revenue_by_month(db: sqlite3.Connection = Depends(get_db)):
