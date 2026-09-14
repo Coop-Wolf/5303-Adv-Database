@@ -1,5 +1,5 @@
 ## Cooper Wolf
-#### Repo: 5303 - Advance Database
+#### Repo: 5303 - Advanced Database
 #### Email: ctwolf1014@my.msutexas.edu
 #### Image:
 <img src="https://github.com/Coop-Wolf/3013-Algorithms/assets/156962773/42348a75-44d8-4764-a1dc-f8942dd4584d" width="200">
