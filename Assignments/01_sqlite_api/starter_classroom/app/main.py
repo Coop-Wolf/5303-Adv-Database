@@ -207,15 +207,45 @@ def revenue_by_state(db: sqlite3.Connection = Depends(get_db)):
 def revenue_by_month(db: sqlite3.Connection = Depends(get_db)):
     raise HTTPException(501, _TODO + " (Phase 2)")
 
-
-@app.get("/products/top", response_model=list[RevenueRow],dependencies=[Depends(require_api_key)])
+# COMPLETE
+@app.get("/products/top", response_model=list[RevenueRow], dependencies=[Depends(require_api_key)])
 def top_products(
     db: sqlite3.Connection = Depends(get_db),
     by: str = Query("revenue", pattern="^(revenue|count)$"),
     limit: int = Query(10, ge=1, le=100),
 ):
     
-    raise HTTPException(501, _TODO + " (Phase 2)")
+    if by == "revenue":
+        order_by = "revenue"
+    elif by == "count":
+        order_by = "num_purchases"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid 'by' parameter")
+    
+    rows = db.execute(f"""
+        SELECT
+            p.product_id AS key,
+            COUNT(*) AS num_purchases,
+            SUM(p.amount) AS revenue
+        FROM purchases p
+        JOIN products pr
+            ON p.product_id = pr.product_id
+        GROUP BY p.product_id
+        ORDER BY {order_by} DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+
+    return [
+        RevenueRow(
+            key=str(row["key"]),
+            num_purchases=row["num_purchases"],
+            revenue=row["revenue"]
+        )
+        for row in rows
+    ]
+
 
 
 # --------------------------------------------------------------------------- #
