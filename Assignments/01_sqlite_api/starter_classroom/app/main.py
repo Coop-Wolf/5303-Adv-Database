@@ -201,11 +201,31 @@ def revenue_by_state(db: sqlite3.Connection = Depends(get_db)):
         for row in rows
     ]
 
-# STILL NEED
+# COMPLETE
 @app.get("/stats/revenue-by-month", response_model=list[RevenueRow],
          dependencies=[Depends(require_api_key)])
 def revenue_by_month(db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 2)")
+    
+    rows = db.execute("""
+        SELECT
+            strftime('%Y-%m', p.purchase_date) AS key,
+            COUNT(*) AS num_purchases,
+            SUM(p.amount) AS revenue
+        FROM purchases p
+        JOIN customers c
+            ON p.customer_id = c.customer_id
+        GROUP BY strftime('%Y-%m', p.purchase_date)
+        ORDER BY key
+    """).fetchall()
+
+    return [
+        RevenueRow(
+            key=row["key"],
+            num_purchases=row["num_purchases"],
+            revenue=row["revenue"]
+        )
+        for row in rows
+    ]
 
 # COMPLETE
 @app.get("/products/top", response_model=list[RevenueRow], dependencies=[Depends(require_api_key)])
@@ -251,15 +271,39 @@ def top_products(
 # --------------------------------------------------------------------------- #
 # Phase 3 -- gnarly queries                (implement all 8 + 2 of your own)
 # --------------------------------------------------------------------------- #
-
 @app.get("/products/search", dependencies=[Depends(require_api_key)])
 def search_products(q: str, db: sqlite3.Connection = Depends(get_db)):
     raise HTTPException(501, _TODO + " (Phase 3: LIKE '%q%' -> then FTS5)")
 
 
-@app.get("/customers/leaderboard", dependencies=[Depends(require_api_key)])
+@app.get("/leaderboard", dependencies=[Depends(require_api_key)])
 def leaderboard(db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 3: 90-day trailing spend window)")
+
+    rows = db.execute("""
+        SELECT
+            c.customer_id,
+            c.first_name,
+            c.last_name,
+            COUNT(*) AS num_purchases,
+            SUM(p.amount) AS spent
+        FROM customers c
+        JOIN purchases p
+            ON c.customer_id = p.customer_id
+        GROUP BY c.customer_id, c.first_name
+        ORDER BY spent DESC
+        LIMIT 10
+    """).fetchall()
+
+    return [
+        {
+            "customer_id": row["customer_id"],
+            "first_name": row["first_name"],
+            "last_name": row["last_name"],
+            "num_purchases": row["num_purchases"],
+            "spent": row["spent"]
+        }
+        for row in rows
+    ]
 
 
 @app.get("/customers/{customer_id}/streaks", dependencies=[Depends(require_api_key)])
