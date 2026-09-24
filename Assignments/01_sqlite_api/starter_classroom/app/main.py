@@ -156,46 +156,154 @@ def list_purchases2(
 _TODO = "not implemented -- see Assignments/01_sqlite_api/README.md"
 
 
-@app.get("/customers/{customer_id}/purchases",
-         response_model=list[PurchaseDetail],
-         dependencies=[Depends(require_api_key)])
+# COMPLETE
+@app.get("/customers/{customer_id}/purchases", response_model=list[PurchaseDetail], dependencies=[Depends(require_api_key)])
 def customer_purchases(customer_id: int, db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 2)")
+    rows = db.execute(
+        """
+        SELECT purchase_id, purchase_date, product_name, department, amount
+        FROM purchase_details
+        WHERE customer_id = ?
+        """,
+        (customer_id,),).fetchall()
+
+    if not rows:
+        raise HTTPException(404, f"no purchases found for customer {customer_id}")
+
+    return [dict(row) for row in rows]
 
 
+# COMPLETE
 @app.get("/stats/revenue-by-state", response_model=list[RevenueRow],
          dependencies=[Depends(require_api_key)])
 def revenue_by_state(db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 2)")
 
+    rows = db.execute("""
+        SELECT
+            z.state_code AS key,
+            COUNT(*) AS num_purchases,
+            SUM(p.amount) AS revenue
+        FROM purchases p
+        JOIN customers c
+            ON p.customer_id = c.customer_id
+        JOIN zipcodes z
+            ON c.zipcode = z.zipcode
+        GROUP BY z.state_code
+        ORDER BY z.state_code
+    """).fetchall()
 
+    return [
+        RevenueRow(
+            key=row["key"],
+            num_purchases=row["num_purchases"],
+            revenue=row["revenue"]
+        )
+        for row in rows
+    ]
+
+# COMPLETE
 @app.get("/stats/revenue-by-month", response_model=list[RevenueRow],
          dependencies=[Depends(require_api_key)])
 def revenue_by_month(db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 2)")
+    
+    rows = db.execute("""
+        SELECT
+            strftime('%Y-%m', p.purchase_date) AS key,
+            COUNT(*) AS num_purchases,
+            SUM(p.amount) AS revenue
+        FROM purchases p
+        JOIN customers c
+            ON p.customer_id = c.customer_id
+        GROUP BY strftime('%Y-%m', p.purchase_date)
+        ORDER BY key
+    """).fetchall()
 
+    return [
+        RevenueRow(
+            key=row["key"],
+            num_purchases=row["num_purchases"],
+            revenue=row["revenue"]
+        )
+        for row in rows
+    ]
 
-@app.get("/products/top", response_model=list[RevenueRow],dependencies=[Depends(require_api_key)])
+# COMPLETE
+@app.get("/products/top", response_model=list[RevenueRow], dependencies=[Depends(require_api_key)])
 def top_products(
     db: sqlite3.Connection = Depends(get_db),
     by: str = Query("revenue", pattern="^(revenue|count)$"),
     limit: int = Query(10, ge=1, le=100),
 ):
-    raise HTTPException(501, _TODO + " (Phase 2)")
+    
+    if by == "revenue":
+        order_by = "revenue"
+    elif by == "count":
+        order_by = "num_purchases"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid 'by' parameter")
+    
+    rows = db.execute(f"""
+        SELECT
+            p.product_id AS key,
+            COUNT(*) AS num_purchases,
+            SUM(p.amount) AS revenue
+        FROM purchases p
+        JOIN products pr
+            ON p.product_id = pr.product_id
+        GROUP BY p.product_id
+        ORDER BY {order_by} DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+
+    return [
+        RevenueRow(
+            key=str(row["key"]),
+            num_purchases=row["num_purchases"],
+            revenue=row["revenue"]
+        )
+        for row in rows
+    ]
+
 
 
 # --------------------------------------------------------------------------- #
 # Phase 3 -- gnarly queries                (implement all 8 + 2 of your own)
 # --------------------------------------------------------------------------- #
-
 @app.get("/products/search", dependencies=[Depends(require_api_key)])
 def search_products(q: str, db: sqlite3.Connection = Depends(get_db)):
     raise HTTPException(501, _TODO + " (Phase 3: LIKE '%q%' -> then FTS5)")
 
 
-@app.get("/customers/leaderboard", dependencies=[Depends(require_api_key)])
+@app.get("/leaderboard", dependencies=[Depends(require_api_key)])
 def leaderboard(db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 3: 90-day trailing spend window)")
+
+    rows = db.execute("""
+        SELECT
+            c.customer_id,
+            c.first_name,
+            c.last_name,
+            COUNT(*) AS num_purchases,
+            SUM(p.amount) AS spent
+        FROM customers c
+        JOIN purchases p
+            ON c.customer_id = p.customer_id
+        GROUP BY c.customer_id, c.first_name
+        ORDER BY spent DESC
+        LIMIT 10
+    """).fetchall()
+
+    return [
+        {
+            "customer_id": row["customer_id"],
+            "first_name": row["first_name"],
+            "last_name": row["last_name"],
+            "num_purchases": row["num_purchases"],
+            "spent": row["spent"]
+        }
+        for row in rows
+    ]
 
 
 @app.get("/customers/{customer_id}/streaks", dependencies=[Depends(require_api_key)])
