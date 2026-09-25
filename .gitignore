@@ -2,6 +2,12 @@
 !.gitignore
 !.env.example
 
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+
 # SQLite build artifacts (regenerate with rebuild.sql / scale_data.py)
 *.db
 *.db-wal
@@ -13,6 +19,5 @@
 *.session.sql
 
 # Python
-__pycache__/
 *.egg-info/
 
