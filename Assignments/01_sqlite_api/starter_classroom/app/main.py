@@ -31,6 +31,7 @@ from .models import (
     Purchase,
     PurchaseDetail,
     RevenueRow,
+    CubeRow
 )
 
 app = FastAPI(title="SQLite API -- Assignment 01")
@@ -153,9 +154,6 @@ def list_purchases2(
 # Phase 2 -- joins & aggregates            (implement these)
 # --------------------------------------------------------------------------- #
 
-_TODO = "not implemented -- see Assignments/01_sqlite_api/README.md"
-
-
 # COMPLETE
 @app.get("/customers/{customer_id}/purchases", response_model=list[PurchaseDetail], dependencies=[Depends(require_api_key)])
 def customer_purchases(customer_id: int, db: sqlite3.Connection = Depends(get_db)):
@@ -271,11 +269,31 @@ def top_products(
 # --------------------------------------------------------------------------- #
 # Phase 3 -- gnarly queries                (implement all 8 + 2 of your own)
 # --------------------------------------------------------------------------- #
-@app.get("/products/search", dependencies=[Depends(require_api_key)])
+
+# Complete
+@app.get("/products/search", response_model=list[Product], dependencies=[Depends(require_api_key)])
 def search_products(q: str, db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 3: LIKE '%q%' -> then FTS5)")
 
+    rows = db.execute("""
+        SELECT
+            product_id,
+            product_name,
+            unit_price
+        FROM products
+        WHERE product_name LIKE ?
+        ORDER BY product_name
+    """, (f"%{q}%",)).fetchall()
 
+    return [
+        {
+            "product_id": row["product_id"],
+            "product_name": row["product_name"],
+            "unit_price": row["unit_price"]
+        }
+        for row in rows
+    ]
+
+# Complete
 @app.get("/leaderboard", dependencies=[Depends(require_api_key)])
 def leaderboard(db: sqlite3.Connection = Depends(get_db)):
 
@@ -306,34 +324,141 @@ def leaderboard(db: sqlite3.Connection = Depends(get_db)):
     ]
 
 
-@app.get("/customers/{customer_id}/streaks", dependencies=[Depends(require_api_key)])
-def streaks(customer_id: int, db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 3: gaps-and-islands)")
-
-
-@app.get("/reports/cube", dependencies=[Depends(require_api_key)])
+# Complete
+@app.get("/reports/cube", response_model=list[CubeRow], dependencies=[Depends(require_api_key)])
 def cube(db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 3: state x department x month)")
+    rows = db.execute("""
+        SELECT
+            c.state_code,
+            p.department,
+            strftime('%Y-%m', p.purchase_date) AS month,
+            COUNT(*) AS num_purchases,
+            SUM(p.amount) AS revenue
+        FROM purchases p
+        JOIN customers c
+            ON p.customer_id = c.customer_id
+        GROUP BY
+            c.state_code,
+            p.department,
+            month
+        ORDER BY
+            month,
+            c.state_code,
+            p.department
+    """).fetchall()
+
+    return [
+        {
+            "state_code": row["state_code"],
+            "department": row["department"],
+            "month": row["month"],
+            "num_purchases": row["num_purchases"],
+            "revenue": row["revenue"]
+        }
+        for row in rows
+    ]
+    
+# Complete
+@app.get("/products/dead", response_model=list[Product], dependencies=[Depends(require_api_key)])
+def dead_products(state: str, db: sqlite3.Connection = Depends(get_db)):
+    rows = db.execute("""
+        SELECT
+            p.product_id,
+            p.product_name,
+            p.unit_price
+        FROM products p
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM purchases pu
+        JOIN customers c
+            ON pu.customer_id = c.customer_id
+        JOIN zipcodes z
+            ON c.zipcode = z.zipcode
+        WHERE pu.product_id = p.product_id
+        AND z.state_code = ?
+        )
+        ORDER BY p.product_name
+    """, (state,)).fetchall()
+
+    return [
+        {
+            "product_id": row["product_id"],
+            "product_name": row["product_name"],
+            "unit_price": row["unit_price"]
+        }
+        for row in rows
+    ]
 
 
+
+# Complete
 @app.get("/purchases/sample", dependencies=[Depends(require_api_key)])
 def sample(db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 3: ORDER BY random() LIMIT 10)")
+    rows = db.execute("""
+        SELECT
+            purchase_id,
+            customer_id,
+            product_id,
+            department,
+            amount,
+            purchase_date
+        FROM purchases
+        ORDER BY RANDOM()
+        LIMIT 10
+    """).fetchall()
 
-
-@app.get("/products/dead", dependencies=[Depends(require_api_key)])
-def dead_products(state: str, db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 3: anti-join / NOT EXISTS)")
+    return [
+        {
+            "purchase_id": row["purchase_id"],
+            "customer_id": row["customer_id"],
+            "product_id": row["product_id"],
+            "department": row["department"],
+            "amount": row["amount"],
+            "purchase_date": row["purchase_date"]
+        }
+        for row in rows
+    ]
 
 
 # --------------------------------------------------------------------------- #
 # Phase 4 -- writes & concurrency          (implement, then hammer it)
 # --------------------------------------------------------------------------- #
 
+# Complete
 @app.post("/purchases", status_code=201, dependencies=[Depends(require_api_key)])
 def create_purchase(body: NewPurchase, db: sqlite3.Connection = Depends(get_db)):
-    raise HTTPException(501, _TODO + " (Phase 4: INSERT in a transaction, return 201)")
 
+    try:
+        insert = db.execute("""
+            INSERT INTO purchases
+                (customer_id, card_id, product_id, department, amount, purchase_date)
+            VALUES
+                (?, ?, ?, ?, ?, ?)
+        """, (
+            body.customer_id,
+            body.card_id,
+            body.product_id,
+            body.department,
+            body.amount,
+            body.purchase_date.isoformat()
+        ))
+
+        purchase_id = insert.lastrowid
+
+        db.commit()
+
+        return {
+            "purchase_id": purchase_id,
+            "customer_id": body.customer_id,
+            "product_id": body.product_id,
+            "department": body.department,
+            "amount": body.amount,
+            "purchase_date": body.purchase_date
+        }
+
+    except sqlite3.Error as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # --------------------------------------------------------------------------- #
 # Dev entrypoint:  python -m app.main   (run from the starter/ directory)

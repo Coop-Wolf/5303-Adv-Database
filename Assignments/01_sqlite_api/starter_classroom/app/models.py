@@ -60,3 +60,11 @@ class Page(BaseModel):
     items: list
     next_cursor: int | None = None
     total: int | None = None
+
+
+class CubeRow(BaseModel):
+    state_code: str
+    department: str
+    month: str
+    num_purchases: int
+    revenue: float
