@@ -297,7 +297,7 @@ def search_products(q: str, db: sqlite3.Connection = Depends(get_db)):
 @app.get("/leaderboard", dependencies=[Depends(require_api_key)])
 def leaderboard(db: sqlite3.Connection = Depends(get_db)):
 
-    rows = db.execute("""
+    rows = db.execute(""" 
         SELECT
             c.customer_id,
             c.first_name,
